@@ -21,10 +21,12 @@ static inline void delay(int32_t count) {
 }
 
 void uart_init() {
-    // Disable UART0.
-    mmio_write(UART0_CR, 0x00000000);
-    // Setup the GPIO pin 14 && 15.
+    if (check_kernel_status(KERN_STATUS_UART) == 1)
+        return;
 
+    uart_disable();
+
+    // Setup the GPIO pin 14 && 15.
     // Disable pull up/down for all GPIO pins & delay for 150 cycles.
     mmio_write(GPPUD, 0x00000000);
     delay(150);
@@ -56,23 +58,53 @@ void uart_init() {
     mmio_write(UART0_IMSC, (1 << 1) | (1 << 4) | (1 << 5) | (1 << 6) |
             (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10));
 
+    uart_enable();
+    set_kernel_status_on(KERN_STATUS_UART);
+}
+
+static inline void uart_wait_read(){
+    // Wait for UART to have received something.
+    while(mmio_read(UART0_FR) & (1 << 4)){}
+}
+
+static inline void uart_wait_write(){
+    // Wait for UART to become ready to transmit.
+    while(mmio_read(UART0_FR) & (1 << 5)) {}
+}
+
+void uart_enable(){
+    if (check_kernel_status(KERN_STATUS_UART) == 1)
+        return;
     // Enable UART0, receive & transfer part of UART.
     mmio_write(UART0_CR, (1 << 0) | (1 << 8) | (1 << 9));
+    set_kernel_status_on(KERN_STATUS_UART);
+}
+
+void uart_disable(){
+    if (check_kernel_status(KERN_STATUS_UART) == 0)
+        return;
+    // Disable UART0 by writing 0 to the Control Register
+    mmio_write(UART0_CR, 0x00000000);
+    set_kernel_status_off(KERN_STATUS_UART);
 }
 
 void uart_putc(unsigned char c) {
-    // Wait for UART to become ready to transmit.
-    while(mmio_read(UART0_FR) & (1 << 5)){}
+    if (check_kernel_status(KERN_STATUS_UART) == 0)
+        return;
+    uart_wait_write();
     mmio_write(UART0_DR, c);
 }
 
 unsigned char uart_getc() {
-    // Wait for UART to have received something.
-    while(mmio_read(UART0_FR) & (1 << 4)){}
+    if (check_kernel_status(KERN_STATUS_UART) == 0)
+        return 0x00;
+    uart_wait_read();
     return mmio_read(UART0_DR);
 }
 
 void uart_puts(const char* str) {
+    if (check_kernel_status(KERN_STATUS_UART) == 0)
+        return;
     for(size_t i = 0; str[i] != '\0'; i++)
         uart_putc((unsigned char)str[i]);
 }
