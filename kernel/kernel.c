@@ -7,6 +7,8 @@
 
 status_byte_t kernel_status;
 
+extern uint32_t *kernel_header;
+
 extern uint32_t _asm_get_cpu_id();
 extern uint32_t _asm_get_cpu_revision_id();
 extern uint32_t _asm_get_cpu_features();
@@ -35,15 +37,15 @@ void dump_kernel_status(void) {
 }
 
 static uint32_t get_bits(uint32_t n, uint32_t bitmask) {
-	uint32_t result = 0;
-	int i = 0;
-	for (i = 31; i >= 0; i--)
-		if (bitmask & (1u << i))
-			result = result * 2 + ((n & (1u << i)) ? 1 : 0);
-	return result;
+    uint32_t result = 0;
+    int i = 0;
+    for (i = 31; i >= 0; i--)
+        if (bitmask & (1u << i))
+            result = result * 2 + ((n & (1u << i)) ? 1 : 0);
+    return result;
 }
 
-void print_L2_info(){
+void print_L2_info() {
     volatile uint32_t l2_reg = _asm_get_l2_ctrl_reg();
 
     static char * const ram_latency[2] = {
@@ -54,7 +56,7 @@ void print_L2_info(){
     // Looks weird but this is an easier way to implement
     // converting a decimal from binary. The manual states
     // that 0 == 1 core, 1 == 2, etc.
-    // 
+    //
     // See the "L2 Control Register" section of the ARM manual
     static int num_cores[4] = {
         [0] = 1,
@@ -74,8 +76,10 @@ void print_L2_info(){
 void kernel_main(uint32_t r0, uint32_t r1, uint32_t atags) {
     uart_init();
 
+
     char *boot_message = "Doom Kernel booting...";
     printk("%s\n", boot_message);
+    printk("Header: %s\n", (char *) &kernel_header);
 
     print_L2_info();
     dump_kernel_status();
