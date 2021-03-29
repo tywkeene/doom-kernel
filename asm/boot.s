@@ -1,3 +1,9 @@
+.data
+.globl kernel_header
+
+kernel_header: .word 0x6d6f6f64
+beast: .word 0x20363636
+
 // To keep this in the first portion of the binary.
 .section ".text.boot"
 
