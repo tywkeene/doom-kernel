@@ -30,8 +30,7 @@ void putoct(uint32_t val, uint16_t width, uint8_t zeropad) {
 	if(!width){
 		char c[11];
 		uint32_t i = 0;
-		do
-		{
+		do {
 			c[i++] ='0'+(val&0x07);
 			val >>= 3;
 		}
