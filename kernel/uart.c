@@ -5,11 +5,7 @@
 #include "../include/uart.h"
 #include "../include/mmio.h"
 
-// Loop <delay> times in a way that the compiler won't optimize away
-static inline void delay(int32_t count) {
-    asm volatile("__delay_%=: subs %[count], %[count], #1; bne __delay_%=\n"
-         : "=r"(count): [count]"0"(count) : "cc");
-}
+extern void _asm_sleep_cycles(uint32_t n);
 
 void uart_init() {
     if (check_kernel_status(KERN_STATUS_UART) == 1)
@@ -20,11 +16,11 @@ void uart_init() {
     // Setup the GPIO pin 14 && 15.
     // Disable pull up/down for all GPIO pins & delay for 150 cycles.
     mmio_write32(GPPUD, 0x00000000);
-    delay(150);
+    _asm_sleep_cycles(150);
 
     // Disable pull up/down for pin 14,15 & delay for 150 cycles.
     mmio_write32(GPPUDCLK0, (1 << 14) | (1 << 15));
-    delay(150);
+    _asm_sleep_cycles(150);
 
     // Write 0 to GPPUDCLK0 to make it take effect.
     mmio_write32(GPPUDCLK0, 0x00000000);
