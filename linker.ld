@@ -3,8 +3,12 @@ ENTRY(_start)
 SECTIONS
 {
     /* Starts at LOADER_ADDR. */
-    . = 0x8000;
+    /*. = 0x8000;*/
+    . = 0x0000;
+    __bootloader = .;
+
     /* For AArch64, use . = 0x80000; */
+    . = 0x8000;
     __start = .;
     __text_start = .;
     .text :

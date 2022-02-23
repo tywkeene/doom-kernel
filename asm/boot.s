@@ -1,8 +1,21 @@
 .data
-.globl kernel_header
 
-kernel_header: .word 0x6d6f6f64
-beast: .word 0x20363636
+.section ".text.interrupt_table", "x"
+.global _reset
+_reset:
+  b reset_handler /* Reset */
+  b reset_handler              /* Undefined */
+  b reset_handler              /* SWI */
+  b reset_handler              /* Prefetch Abort */
+  b reset_handler              /* Data Abort */
+  b reset_handler              /* Reserved */
+  b reset_handler              /* IRQ */
+  b reset_handler              /* FIQ */
+
+reset_handler:
+ldr sp, =__rodata_end
+bl _start
+b .
 
 // To keep this in the first portion of the binary.
 .section ".text.boot"
@@ -17,6 +30,7 @@ beast: .word 0x20363636
 // r1 -> 0x00000C42 - machine id
 // r2 -> 0x00000100 - start of ATAGS
 // preserve these registers as argument for kernel_main
+
 _start:
 // Shut off extra cores
 mrc p15, 0, r5, c0, c0, 5

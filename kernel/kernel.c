@@ -4,39 +4,44 @@
 #include "../include/kernel.h"
 #include "../include/printk.h"
 #include "../include/uart.h"
-
-status_byte_t kernel_status;
-
-extern uint32_t *kernel_header;
+#include "../include/mmio.h"
+#include "../include/mmap.h"
+#include "../include/gic.h"
+#include "../include/status.h"
 
 extern uint32_t _asm_get_cpu_id();
 extern uint32_t _asm_get_cpu_revision_id();
 extern uint32_t _asm_get_cpu_features();
-extern uint32_t _asm_get_l2_ctrl_reg();
+extern uint32_t _asm_get_board_info();
+extern uint32_t _asm_read_peripheral_base_addr();
+extern uint32_t _asm_enable_interrupts();
 
-// A Mailbox message with set clock rate of PL011 to 3MHz tag
-volatile unsigned int  __attribute__((aligned(16))) mbox[9] = {
-    9*4, 0, 0x38002, 12, 8, 2, 3000000, 0 ,0
-};
+static const char *edgy_pentagram = \
+"                   .......                   \n"
+"            .....          .....             \n"
+"         ....                   ...          \n"
+"       ...  .                    . ...       \n"
+"     ...     ..               ...    ..      \n"
+"    ..       .....         .....      ...    \n"
+"   ..         .   ..     ..   ..       ...   \n"
+"  ..          ..    ....     ..         ...  \n"
+" ...           ..  ... ..   ..           ..  \n"
+" ..            ....       ....           ... \n"
+" ..           ....  DOOM   ....          ... \n"
+" ..        ...                 ...       ... \n"
+" ..     ...      ..       ..      ...    ... \n"
+" ...  .................................  ..  \n"
+"  ..               .    ..              ...  \n"
+"   ..              ..   ..             ...   \n"
+"    ..              .  ..             ...    \n"
+"       ...           ...           ...       \n"
+"         ....         .         ...          \n"
+"            .....     .    .....             \n"
+"                   .......                   \n"
+"            Doom Kernel booting...           \n";
 
-inline void set_kernel_status_on(uint8_t bit) {
-    kernel_status |= (1 << bit);
-}
-
-inline void set_kernel_status_off(uint8_t bit) {
-    kernel_status &= ~(1 << bit);
-}
-
-_Bool check_kernel_status(uint8_t bit) {
-    return kernel_status & (1 << bit);
-}
-
-void dump_kernel_status(void) {
-    printk("Kernel status byte: RES:0000000 UART:%d\n",
-            check_kernel_status(KERN_STATUS_UART));
-}
-
-static uint32_t get_bits(uint32_t n, uint32_t bitmask) {
+static uint32_t get_bits(uint32_t n, uint32_t bitmask)
+{
     uint32_t result = 0;
     int i = 0;
     for (i = 31; i >= 0; i--)
@@ -45,45 +50,48 @@ static uint32_t get_bits(uint32_t n, uint32_t bitmask) {
     return result;
 }
 
-void print_L2_info() {
-    volatile uint32_t l2_reg = _asm_get_l2_ctrl_reg();
-
-    static char * const ram_latency[2] = {
-        [0x0] = "2 cycles",
-        [0x1] = "3 cycles",
-    };
-
+uint32_t get_core_count()
+{
+    volatile uint32_t reg;
+    asm volatile("mrc p15, 1, %[out], c9, c0, 2" : [out] "=r" (reg));
     // Looks weird but this is an easier way to implement
-    // converting a decimal from binary. The manual states
-    // that 0 == 1 core, 1 == 2, etc.
-    //
-    // See the "L2 Control Register" section of the ARM manual
-    static int num_cores[4] = {
-        [0] = 1,
-        [1] = 2,
-        [2] = 3,
-        [3] = 4,
-    };
-
-    char *latency_str = ram_latency[get_bits(l2_reg, (1 << 0))];
-    int cores = num_cores[get_bits(l2_reg, ((1 << 24) | (1 << 25)) )];
-
-    printk("RAM Latency: %s\n", latency_str);
-    printk("Interrupt Controller Present: %u\n", get_bits(l2_reg, ((1 << 23))));
-    printk("Cores: %d\n", cores);
+    // converting a decimal from binary, at least for 4 bits.
+    // The manual states that 0 == 1 core, 1 == 2, etc.
+    static int num_cores[4] = { [0] = 1, [1] = 2, [2] = 3, [3] = 4};
+    return num_cores[ get_bits(reg, ((1 << 24) | (1 << 25)) )];
 }
 
-void kernel_main(uint32_t r0, uint32_t r1, uint32_t atags) {
+void print_cpu_features()
+{
+    volatile uint32_t value;
+
+    // Detect instruction set support
+    asm volatile("mrc p15, 0, %[out], c0, c1, 0" : [out] "=r" (value));
+    printk("Supports ARM instruction set: %#08x\n", get_bits(value, ((1 << 0) | (1 << 1)|(1 << 2)|(1 << 3))) );
+    printk("Supports THUMB instruction set: %#08x\n", get_bits(value, ((1 << 4) | (1 << 5) | (1 << 6) | (1 << 7))) );
+
+    // Get core count
+    asm volatile("mrc p15, 1, %[out], c9, c0, 2" : [out] "=r" (value));
+    // Looks weird but this is an easier way to implement
+    // converting a decimal from binary, at least for 4 bits.
+    // The manual states that 0 == 1 core, 1 == 2, etc.
+    static int num_cores[4] = { [0] = 1, [1] = 2, [2] = 3, [3] = 4};
+    printk("%d cores\n", num_cores[ get_bits(value, ((1 << 24) | (1 << 25)))]);
+}
+
+void kernel_main(uint32_t r0, uint32_t r1, uint32_t atags)
+{
     uart_init();
+    print_cpu_features();
 
+    printk("%s\n", edgy_pentagram);
+    printk("Peripheral base address: %#08x\n", _asm_read_peripheral_base_addr());
 
-    char *boot_message = "Doom Kernel booting...";
-    printk("%s\n", boot_message);
-    printk("Header: %s\n", (char *) &kernel_header);
+    enable_global_interrupt_controller();
+    gic_enable_interrupt(37);
+    asm volatile("cpsie if");
 
-    print_L2_info();
-    dump_kernel_status();
-    while(1)
-        uart_putc(uart_getc());
+    int a = 1 / 0;
+    while(1);
     // run_doom() goes here
 }

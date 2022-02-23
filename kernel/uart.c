@@ -1,9 +1,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../include/kernel.h"
 #include "../include/uart.h"
 #include "../include/mmio.h"
+#include "../include/status.h"
 
 extern void _asm_sleep_cycles(uint32_t n);
 
